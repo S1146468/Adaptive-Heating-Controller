@@ -11,7 +11,7 @@ STOP = "Adaptive Heating Controller 0.1.0 stopped gracefully (mode=read-only)"
 
 
 def docker(*args: str) -> str:
-    return subprocess.check_output(["docker", *args], text=True).strip()
+    return subprocess.check_output(["docker", *args], text=True, stderr=subprocess.STDOUT).strip()
 
 
 def inspect(name: str) -> dict:
