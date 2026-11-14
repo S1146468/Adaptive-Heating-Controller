@@ -1,0 +1,1008 @@
+# Adaptive Heating Controller
+## Product Description & Requirements Specification
+
+**Version:** 0.4  
+**Date:** 13 November 2026  
+**Status:** Product definition — development preparation  
+**GitHub:** https://github.com/S1146468/Adaptive-Heating-Controller  
+**Repository:** `S1146468/Adaptive-Heating-Controller`  
+**Default branch:** `main`  
+**Visibility:** Public  
+**Target platform:** Home Assistant OS — Raspberry Pi 5 (8 GB RAM, SSD)
+
+---
+
+# 1. Project overview
+
+Adaptive Heating Controller is an open-source, locally hosted Home Assistant App that uses **adaptive thermal modelling, machine learning, and centralized Model Predictive Control (MPC)** to intelligently control multi-room radiator heating systems.
+
+The application learns the unique thermal characteristics of each room and uses those models to maintain precise room temperatures while coordinating individual radiator valves and the central heating boiler.
+
+The system accounts for outdoor weather, solar radiation, ventilation, internal heat sources, thermal inertia, and boiler operating conditions.
+
+All external sensor inputs and actuator commands communicate exclusively through Home Assistant.
+
+The application is initially designed for a private two-zone heating installation but must support configurable rooms, devices, and heating-system parameters without hardcoded entity IDs.
+
+## 1.1 Primary objectives
+
+1. Maintain precise and stable room temperatures, targeting ±0.2°C where physically achievable.
+2. Continuously learn the thermal characteristics of each individual room.
+3. Predict future room-temperature behaviour to prevent overshoot and undershoot.
+4. Coordinate all radiators and the boiler using one centralized MPC.
+5. Control both the OpenTherm heating-water setpoint and individual TRVs.
+6. Account for changes in outdoor conditions and internal heat gains.
+7. Minimize unnecessary boiler cycling and actuator movement.
+8. Operate conservatively during initial model learning.
+9. Provide reliable fallback operation when MPC, sensors, or communication fail.
+10. Integrate configuration, monitoring, and diagnostics into Home Assistant.
+
+**Temperature stability and user comfort are the highest optimization priorities.**
+
+Energy efficiency is a secondary objective and must not compromise the requested comfort performance.
+
+## 1.2 Product principles
+
+- Local processing without mandatory cloud dependencies.
+- Modular, maintainable software architecture.
+- Physics-informed adaptive models rather than neural networks.
+- Passive learning from normal heating operation.
+- Explicit and verifiable control ownership.
+- Safe, incremental development.
+- Configurable hardware and room mappings.
+- Transparent decision-making and diagnostics.
+- Long-term model persistence and historical data retention.
+- Stability and proven performance over experimental complexity.
+
+---
+
+# 2. GitHub repository and project management
+
+## 2.1 Official repository
+
+**Repository:** https://github.com/S1146468/Adaptive-Heating-Controller
+
+This repository is the official source of truth for:
+
+- Application source code.
+- Product requirements.
+- System architecture.
+- Mathematical model definitions.
+- Development roadmap.
+- Hardware integration documentation.
+- Installation instructions.
+- Configuration examples.
+- Automated tests.
+- Release packages.
+- Issues and future improvements.
+
+The repository shall be structured as a Home Assistant App repository so users can install the controller through Home Assistant.
+
+## 2.2 Proposed repository structure
+
+| Directory / file | Purpose |
+|---|---|
+| `README.md` | Project overview and installation |
+| `repository.yaml` | Home Assistant App repository metadata |
+| `adaptive_heating_controller/` | Installable Home Assistant App |
+| `adaptive_heating_controller/config.yaml` | App manifest and configuration |
+| `adaptive_heating_controller/Dockerfile` | ARM64 container build |
+| `adaptive_heating_controller/app/` | Python application |
+| `app/integrations/` | Home Assistant API and entity adapters |
+| `app/models/` | Thermal, radiator and boiler models |
+| `app/learning/` | Adaptive parameter estimation |
+| `app/optimization/` | Centralized MPC |
+| `app/control/` | TRV, boiler and safety control |
+| `app/storage/` | Persistence, export and historical data |
+| `docs/` | Architecture, safety, requirements and technical documentation |
+| `tests/` | Unit, integration and simulation tests |
+| `.github/workflows/` | Automated validation, builds and releases |
+
+The final repository structure may be refined during initial implementation.
+
+## 2.3 Development workflow
+
+Development shall use GitHub issues, feature branches and pull requests.
+
+The `main` branch should remain in a tested, installable state.
+
+Each significant feature should include:
+
+- A defined requirement or issue.
+- Implementation changes.
+- Tests.
+- Relevant documentation.
+- Release notes where applicable.
+
+Automated GitHub Actions should validate Python code, configuration files, tests, and container builds.
+
+## 2.4 Releases and installation
+
+The project shall support:
+
+- Installation from its GitHub Home Assistant App repository.
+- Versioned application releases.
+- Development/beta releases.
+- Stable releases.
+- Home Assistant-managed updates.
+- Optional automatic updates through Home Assistant.
+- Backup and restoration.
+- Documented rollback procedures.
+
+The initial development version shall be **v0.1.0**, with read-only functionality.
+
+## 2.5 Public repository security
+
+Because the GitHub repository is public, the project must not contain:
+
+- Home Assistant API tokens.
+- ESPHome encryption keys.
+- Wi-Fi credentials.
+- Passwords.
+- Private installation addresses.
+- Personal device identifiers or MAC addresses.
+- Sensitive household activity histories.
+
+Example configurations shall use placeholder entity IDs and dummy credentials.
+
+Actual installation configuration and learned household models must remain local unless explicitly exported.
+
+---
+
+# 3. Hosting and deployment architecture
+
+## 3.1 Target environment
+
+| Component | Specification |
+|---|---|
+| Host | Raspberry Pi 5 |
+| RAM | 8 GB |
+| Storage | SSD |
+| OS | Home Assistant OS |
+| Application | Custom Home Assistant App |
+| Runtime | Python in isolated container |
+| External interface | Home Assistant WebSocket/REST APIs |
+| Persistent storage | SQLite initially |
+| Numerical processing | NumPy / SciPy |
+| Optimization | CVXPY with OSQP initially |
+
+The system shall be designed to operate within reasonable CPU, RAM, and storage limits on the Raspberry Pi 5.
+
+Optimization must not block normal Home Assistant operation.
+
+## 3.2 Exclusive Home Assistant communication
+
+All external inputs and outputs must pass through Home Assistant.
+
+The application shall not directly communicate with:
+
+- Zigbee2MQTT.
+- The Zigbee coordinator.
+- The MQTT broker.
+- Individual ESPHome devices.
+- OpenTherm hardware.
+
+The App shall use Home Assistant's supported interfaces for reading state and issuing service/action calls.
+
+## 3.3 Application operating modes
+
+The application shall support:
+
+| Mode | Behaviour |
+|---|---|
+| Read-only | Collect and log data without controlling heating |
+| Shadow MPC | Calculate optimized commands without applying them |
+| Conventional | Deterministic fallback temperature control |
+| Active MPC | Predictive control of the boiler and radiators |
+
+Mode changes must be explicit, logged, and safe.
+
+The application must not automatically enter active MPC mode after installation.
+
+---
+
+# 4. Existing heating installation
+
+## 4.1 Boiler
+
+**Manufacturer:** Intergas  
+**Model:** 24/18 HRE  
+**Communication:** OpenTherm through ESPHome  
+**Controller hardware:** ESP32
+
+The boiler is relatively powerful compared with the two actively heated zones, causing burner cycling during low heating demand.
+
+Exact boiler minimum output and hydraulic requirements remain to be verified.
+
+Current OpenTherm heating-water limits are approximately 40–70°C.
+
+The App must support configurable flow-temperature limits and avoid excessive boiler cycling.
+
+## 4.2 Boiler telemetry
+
+Available measurements include:
+
+- Flame on/off.
+- Central heating active.
+- Domestic hot-water active.
+- Actual heating-water temperature.
+- Requested heating-water temperature.
+- Smoothed outdoor temperature.
+- CH circuit water pressure.
+- Boiler diagnostic status.
+- Boiler fault status.
+- Burner starts.
+- CH burner runtime.
+- DHW burner runtime.
+- Service-required status.
+
+Unavailable or unconfirmed measurements include:
+
+- Return-water temperature.
+- Actual burner modulation percentage.
+- Exact heating power.
+
+The controller shall function without these optional measurements.
+
+## 4.3 Existing ESPHome control
+
+The present system uses two room-specific PID controllers and a shared OpenTherm water-temperature calculation.
+
+Existing room PID parameters:
+
+- \(K_p = 0.8\)
+- \(K_i = 0.00012\)
+- \(K_d = 0\)
+- Temperature deadband: ±0.2°C
+- Update interval: 5 seconds
+
+Home Assistant automations currently synchronize climate entities and TRV valve controls.
+
+**The new application must not compete with these existing controllers.**
+
+A defined control-handover mechanism must allow:
+
+1. Existing ESPHome control.
+2. Supervised external App control.
+3. Recovery to validated conventional control following a failure.
+
+The existing heating setup remains authoritative during the initial read-only and shadow-testing phases.
+
+---
+
+# 5. Room configuration
+
+## 5.1 Initial heating zones
+
+The initial system contains two zones:
+
+- Kamer Stijn.
+- Kamer Nick.
+
+Both rooms are approximately 15.5 m² and have one radiator each, approximately 180 × 60 cm, possibly Type 22.
+
+Each room has:
+
+- SONOFF TRVZB radiator valve.
+- SONOFF SNZB-02P temperature/humidity sensor.
+- SONOFF SNZB-04P window-contact sensor.
+
+The application shall support additional rooms and multiple radiators per room in future.
+
+## 5.2 Dynamic configuration
+
+Room definitions must be configurable without modifying source code.
+
+Each room configuration shall support:
+
+- Name and unique ID.
+- Home Assistant climate entity.
+- External temperature sensor.
+- TRV device and control entities.
+- Optional window-contact entity.
+- Optional humidity sensor.
+- Optional electrical power sensors.
+- Optional window orientation and glazing area.
+- Approximate room dimensions.
+- Radiator information.
+- Room-specific control settings.
+- Persistent learned-model parameters.
+
+Automatic entity discovery is not required.
+
+## 5.3 Temperature sensor fallback
+
+The external SNZB-02P is the preferred temperature input.
+
+If that sensor becomes unavailable, the controller shall use the TRVZB's internal temperature sensor as the fallback.
+
+Sensor failures must be logged.
+
+---
+
+# 6. User temperature control
+
+The user shall adjust room temperatures using normal Home Assistant thermostat/climate entities.
+
+There shall be:
+
+- No automatic heating schedules.
+- No occupancy-based temperature changes.
+- No automatic temperature setbacks.
+- No predictive preheating for scheduled future events.
+
+The selected temperature stays active until manually changed.
+
+The controller must optimize how the room reaches and maintains that setpoint.
+
+The target temperature-control tolerance is ±0.2°C where practical.
+
+Manual changes shall be reflected in the controller immediately.
+
+The user-facing climate interface must not send conflicting heater commands independently of the App.
+
+---
+
+# 7. TRV control
+
+## 7.1 Hardware
+
+The SONOFF TRVZB provides configurable opening and closing positions.
+
+The existing installation uses direct valve settings, rather than the TRV's built-in adaptive temperature controller.
+
+Commands are applied in experimentally observed 5% increments.
+
+## 7.2 Requirements
+
+The system shall:
+
+1. Control each TRV independently.
+2. Support 5% command increments.
+3. Learn the effective radiator response.
+4. Account for nonlinear valve-to-heat behaviour.
+5. Avoid unnecessary motor movement.
+6. Limit how rapidly valve commands can change.
+7. Log every requested command and relevant reported state.
+8. Detect failed or unavailable actuators.
+9. Support safe fallback behaviour.
+
+The application must not assume that valve opening percentage equals water-flow percentage.
+
+Actual actuator behaviour must be validated before enabling MPC control.
+
+---
+
+# 8. Window control
+
+Window control is a mandatory deterministic feature, independent of the MPC optimizer.
+
+## 8.1 Window opens
+
+Immediately:
+
+- Request closure of the corresponding TRV.
+- Prevent ordinary MPC heating commands from reopening it.
+- Exclude the room's normal comfort demand from boiler-demand calculation.
+- Continue normal heating in other rooms.
+
+No intentional window-opening delay is required.
+
+## 8.2 Window closes
+
+Immediately:
+
+- Remove the window override.
+- Restore normal room-temperature control.
+- Apply the currently selected room setpoint.
+- Allow MPC to calculate the appropriate radiator demand.
+
+The controller should not automatically force the radiator fully open.
+
+## 8.3 Unavailable window sensor
+
+If a window-contact sensor becomes unavailable, the application shall treat the window as closed for heating purposes.
+
+The missing sensor must be recorded in the logs.
+
+## 8.4 Frost protection
+
+The controller shall maintain appropriate frost protection, using the TRV's internal temperature sensor when necessary.
+
+Software closure commands must not disable underlying equipment frost protection.
+
+---
+
+# 9. Adaptive thermal modelling
+
+## 9.1 Per-room models
+
+Each room shall have its own adaptive thermal model.
+
+The initial implementation shall use a physics-informed two-state RC model (2R2C).
+
+States:
+
+- Room-air temperature.
+- Effective thermal-mass temperature.
+
+Where justified by the data, an additional radiator thermal state may be introduced.
+
+## 9.2 Learned parameters
+
+Each room model shall learn effective characteristics including:
+
+- Heat loss.
+- Thermal capacity.
+- Heating response.
+- Cooling response.
+- Heating delay.
+- Radiator effectiveness.
+- Residual radiator heating.
+- Outdoor-temperature sensitivity.
+- Solar heat gains.
+- Ventilation influence.
+- Internal electrical heat gains.
+
+The controller shall use effective coefficients when exact physical parameters are not individually identifiable.
+
+## 9.3 Learning algorithms
+
+Initial methods:
+
+**Kalman filtering:** Estimate hidden thermal states.
+
+**Constrained Recursive Least Squares:** Adapt suitable thermal parameters online.
+
+**Parameter validation:** Prevent unstable or physically unreasonable estimates.
+
+**Prediction-error monitoring:** Evaluate short-horizon temperature predictions.
+
+No neural networks or reinforcement learning are required.
+
+## 9.4 Learning requirements
+
+- Begin learning in read-only mode.
+- Learn only from normal heating operation.
+- Do not deliberately disturb room temperatures for training.
+- Continuously adapt over time.
+- Maintain separate models per room.
+- Persist models across restarts.
+- Validate model updates before active use.
+- Fall back when prediction reliability becomes unacceptable.
+- Show learned characteristics and model quality in Home Assistant.
+
+Initially conservative parameter adaptation shall be preferred over fast, unstable learning.
+
+---
+
+# 10. External disturbance modelling
+
+## 10.1 Weather
+
+The controller shall support KNMI weather data available through Home Assistant.
+
+Potential inputs:
+
+- Outdoor temperature.
+- Forecast temperature.
+- Solar irradiance.
+- Sun position.
+- Available cloud/sunshine forecasts.
+
+If forecast information is unavailable, the controller must operate using conservative assumptions.
+
+## 10.2 Solar gains
+
+Each room may define:
+
+- Window orientation.
+- Window area.
+- Optional glazing characteristics.
+
+The controller shall estimate solar heating using actual irradiance in W/m² and solar position.
+
+Missing window specifications must not prevent controller operation.
+
+Unmeasured shades or blinds shall be treated as uncertainty in the effective solar-gain model.
+
+## 10.3 Ventilation
+
+The house uses a Zehnder ComfoFan mechanical ventilation system.
+
+Current states:
+
+- Low.
+- Medium.
+- High.
+
+Initial normalized control-model inputs:
+
+- Low = 0%.
+- Medium = 50%.
+- High = 100%.
+
+These values describe relative ventilation operating level, not actual airflow or absolute ventilation heat loss.
+
+The controller shall learn ventilation-related heat losses automatically.
+
+A future version must allow a continuous 0–100% ventilation signal.
+
+The App shall not control ventilation.
+
+## 10.4 Internal electrical heat sources
+
+Each room may optionally configure electrical power sensors.
+
+Examples:
+
+- Gaming computer.
+- Monitors.
+- 3D printer.
+
+Electrical power shall be used as an approximate internal heat-gain input.
+
+When no sensor is configured, the measured electrical heat-gain input defaults to zero.
+
+Power measurements shall not be used for occupancy prediction.
+
+---
+
+# 11. Centralized MPC
+
+## 11.1 Architecture
+
+One centralized MPC shall combine all individual room models with a shared heating-system model.
+
+It shall optimize:
+
+- Requested boiler-water temperature.
+- Central-heating demand.
+- Individual radiator control outputs.
+
+The optimization must account for the shared boiler and the coupling introduced by common water supply.
+
+## 11.2 Optimization priorities
+
+1. Equipment safety and operating constraints.
+2. Accurate room-temperature tracking.
+3. Reduced overshoot and undershoot.
+4. Stable boiler operation.
+5. Reduced unnecessary valve movement.
+6. Energy efficiency where comfort remains unaffected.
+
+## 11.3 Initial MPC configuration
+
+| Property | Initial value |
+|---|---|
+| Prediction horizon | 4 hours |
+| Optimization interval | 5 minutes |
+| Prediction step | 5 minutes |
+| Room-state update | Event-driven / up to 1 minute |
+| Parameter-learning interval | 15–60 minutes |
+| TRV resolution | 5% |
+| Water-temperature bounds | Initially 40–70°C |
+
+These are initial settings and shall remain configurable.
+
+## 11.4 Control constraints
+
+The optimizer shall respect:
+
+- Boiler-water-temperature limits.
+- Verified minimum boiler output and operating limitations.
+- Boiler cycling restrictions.
+- TRV actuation range.
+- TRV movement restrictions.
+- Available heating capacity.
+- Domestic-hot-water priority.
+- Window-open overrides.
+- Sensor and actuator availability.
+- Verified circulation requirements.
+
+No MPC action may bypass deterministic equipment-safety rules.
+
+## 11.5 Conservative initialization
+
+During early learning:
+
+- Limit command changes.
+- Avoid aggressive valve movement.
+- Restrict model-based corrections.
+- Use validated conventional control when confidence is low.
+- Gradually increase optimization authority after validation.
+
+The controller must not cause substantial temperature swings while learning.
+
+---
+
+# 12. Safety, fallback and control ownership
+
+## 12.1 Command supervisor
+
+All actuator requests must pass through a deterministic command supervisor.
+
+The supervisor shall validate:
+
+- Current operating mode.
+- Command authority.
+- Measurement freshness.
+- Command limits.
+- Device availability.
+- Boiler status.
+- Window state.
+- Hydraulic constraints.
+- Fallback conditions.
+
+## 12.2 Failure handling
+
+Required failure scenarios include:
+
+- App process crash.
+- Home Assistant restart.
+- ESPHome restart.
+- OpenTherm communication failure.
+- Zigbee disconnection.
+- Invalid room-temperature reading.
+- MPC solver failure.
+- Invalid learned model.
+- Boiler diagnostic fault.
+- Failed TRV command.
+- Missing weather forecast.
+
+Failures must be logged.
+
+No notifications are required initially.
+
+## 12.3 Existing control fallback
+
+The existing ESPHome controller should remain available as the conventional heating fallback.
+
+The final implementation must define and validate a safe control-handover mechanism.
+
+A complete Home Assistant outage must not leave an uncontrolled stale MPC command active indefinitely.
+
+The exact ESPHome fallback logic must be verified before active MPC deployment.
+
+## 12.4 Hydraulic safety
+
+The heating system's bypass and guaranteed circulation arrangements are not confirmed.
+
+Because the property is rented, the product must not assume physical modifications are possible.
+
+Active boiler and TRV optimization must remain subject to verified installation requirements.
+
+Software optimization cannot replace mandatory hydraulic protection.
+
+## 12.5 Fault acknowledgement
+
+A configurable setting shall determine whether specific critical faults require manual acknowledgement before MPC restarts.
+
+Transient recoverable errors should be handled automatically where safe.
+
+---
+
+# 13. Home Assistant user interface
+
+The initial product shall expose its operation primarily through Home Assistant entities.
+
+## 13.1 General status
+
+Required information:
+
+- Application operating mode.
+- Application status.
+- Current boiler-water temperature.
+- Requested boiler-water temperature.
+- Flame state.
+- CH activity.
+- Window override status.
+- MPC status.
+- Fallback state.
+- Error status.
+
+## 13.2 Room information
+
+Each room shall expose:
+
+- Measured temperature.
+- Target temperature.
+- TRV output.
+- Heating demand.
+- Window state.
+- Predicted future temperature.
+- Model status.
+- Model confidence.
+- Prediction error.
+
+## 13.3 Advanced diagnostics
+
+An advanced section shall provide:
+
+- Learned model parameters.
+- Thermal characteristics.
+- Actual versus predicted temperature.
+- MPC prediction curves.
+- Solver status and execution time.
+- Control decisions and explanations.
+- Command history.
+- Debug/error logs.
+
+A dedicated App web interface may be added if Home Assistant entities and dashboards become insufficient.
+
+---
+
+# 14. Storage and data retention
+
+The application shall store:
+
+- Room measurements.
+- Boiler telemetry.
+- Weather and solar inputs.
+- Ventilation states.
+- Electrical heat gains.
+- Room setpoints.
+- Window events.
+- Valve commands.
+- MPC recommendations.
+- Actual actuator actions.
+- Thermal model parameters.
+- Prediction errors.
+- Controller state and faults.
+
+## 14.1 Retention
+
+Historical measurements shall be retained indefinitely unless the user changes the retention policy.
+
+Storage growth must be monitored.
+
+The system may support compression or archival without silently deleting retained data.
+
+## 14.2 Persistence and backup
+
+Required:
+
+- Persistent learned models.
+- Persistent room configuration.
+- Persistent control settings.
+- Home Assistant App backup integration.
+- Restore after reinstall/update.
+- Export to CSV/JSON for offline analysis.
+
+---
+
+# 15. Testing and validation
+
+## 15.1 Read-only testing
+
+The first release must not issue any physical heating commands.
+
+It shall confirm:
+
+- Home Assistant connectivity.
+- Correct entity mappings.
+- Reliable data acquisition.
+- Correct timestamp handling.
+- Proper persistence.
+- Stable CPU/RAM usage.
+- Working logs and diagnostics.
+
+## 15.2 Shadow-mode testing
+
+The MPC shall calculate optimized control actions without applying them.
+
+This allows evaluation of:
+
+- Model prediction quality.
+- Optimization feasibility.
+- Solver performance.
+- Proposed command stability.
+- Equipment-constraint compliance.
+
+Shadow mode is not proof of actual energy savings.
+
+## 15.3 Active-control testing
+
+Before enabling active control, tests must cover:
+
+- Window opening and closing.
+- TRV control.
+- Boiler control.
+- Domestic-hot-water interruptions.
+- Sensor failure.
+- Zigbee interruption.
+- Home Assistant restart.
+- ESPHome restart.
+- MPC failure.
+- Fallback operation.
+- Small heating loads.
+- Low outside temperatures.
+- Boiler cycling.
+
+## 15.4 Performance evaluation
+
+Primary metrics:
+
+- Mean absolute temperature error.
+- RMSE.
+- Time outside ±0.2°C.
+- Maximum overshoot.
+- Maximum undershoot.
+- Temperature recovery.
+- Model prediction error.
+
+Secondary metrics:
+
+- Burner starts.
+- Burner runtime.
+- Requested water temperature.
+- Valve movement.
+- Actual gas consumption.
+- Computational performance.
+
+The main measure of success is improved and consistent temperature stability.
+
+---
+
+# 16. Development roadmap
+
+## v0.1.0 — Read-only Home Assistant App
+
+**Objective:** Establish a reliable, installable foundation.
+
+Deliverables:
+
+- GitHub App repository structure.
+- App manifest and ARM64 container.
+- Python application framework.
+- Home Assistant API connection.
+- Configurable heating zones.
+- Sensor state ingestion.
+- Boiler telemetry logging.
+- Historical storage.
+- Application diagnostics.
+- Basic Home Assistant entities.
+- Installation instructions.
+
+No physical heating commands.
+
+## v0.2.0 — Window and conventional control
+
+**Objective:** Implement safe, deterministic control behaviour.
+
+Deliverables:
+
+- Window-triggered TRV closure.
+- Automatic restoration.
+- TRV command validation.
+- Conventional controller.
+- Control authority management.
+- Error handling.
+- Recovery testing.
+
+Active control must be enabled explicitly.
+
+## v0.3.0 — Adaptive room learning
+
+**Objective:** Learn each room's thermal behaviour.
+
+Deliverables:
+
+- Per-room 2R2C models.
+- Kalman state estimation.
+- Constrained RLS learning.
+- Solar-gain modelling.
+- Ventilation modelling.
+- Optional electrical heat gains.
+- Model persistence.
+- Prediction diagnostics.
+
+## v0.4.0 — Centralized MPC in shadow mode
+
+**Objective:** Optimize the full heating system without actuator authority.
+
+Deliverables:
+
+- Whole-house model.
+- Forecast trajectories.
+- Centralized MPC.
+- Equipment constraints.
+- Proposed radiator commands.
+- Proposed OpenTherm requests.
+- Solver diagnostics.
+- Predicted-versus-actual visualization.
+
+## v0.5.0 — Supervised active MPC
+
+**Objective:** Introduce real MPC control.
+
+Deliverables:
+
+- ESPHome control arbitration.
+- Active OpenTherm control.
+- Direct TRV control.
+- Deterministic safety supervisor.
+- Fallback handling.
+- Control-command validation.
+- Progressive commissioning.
+
+## v1.0.0 — Stable production release
+
+**Objective:** Reliable continuous heating operation.
+
+Deliverables:
+
+- Validated seasonal temperature performance.
+- Stable adaptive learning.
+- Safe failure recovery.
+- Complete configuration and monitoring.
+- Performance comparisons.
+- Backup/restore support.
+- Documentation.
+- Production-ready GitHub release.
+
+---
+
+# 17. Acceptance criteria
+
+The product is ready for production when:
+
+1. It installs through Home Assistant from the GitHub App repository.
+2. It runs reliably on the Raspberry Pi 5.
+3. All application external I/O passes through Home Assistant.
+4. Room configuration does not require source-code modification.
+5. Both initial zones operate independently.
+6. User-selected setpoints remain authoritative.
+7. Windows immediately trigger temporary radiator closure.
+8. Closing a window restores normal room control.
+9. Each room develops its own persistent adaptive thermal model.
+10. Model prediction quality is measurable.
+11. The MPC coordinates boiler and TRV requests.
+12. TRV commands respect the validated actuator resolution.
+13. Boiler commands respect verified operating limitations.
+14. Domestic-hot-water operation remains unaffected.
+15. Failed models and optimization runs trigger safe fallback.
+16. Conflicting heating controllers cannot simultaneously own an actuator.
+17. All significant actions and errors are logged.
+18. Home Assistant exposes configuration and diagnostics.
+19. Historical data and learned models survive restarts.
+20. Comfort performance is measured against the existing system.
+21. Relevant failure and recovery tests pass.
+22. No unresolved safety-critical issues remain.
+
+---
+
+# 18. Outstanding implementation verification
+
+The following must be investigated during development:
+
+| Item | Current status |
+|---|---|
+| ESPHome control-handover mechanism | Needs implementation/verification |
+| Existing Home Assistant heating automations | Full review pending |
+| Boiler minimum modulation capacity | Unknown |
+| Hydraulic bypass/minimum flow | Unknown |
+| Reliable TRV motor-position control | Needs validation |
+| Generic Thermostat command ownership | Needs integration design |
+| Actual gas-meter entity and update interval | Configuration pending |
+| Home Assistant entity IDs | User configuration pending |
+| Window orientation and geometry | Optional configuration pending |
+| Long-term thermal-model accuracy | To be established experimentally |
+
+These are implementation tasks and verification items, not reasons to delay read-only App development.
+
+---
+
+# 19. Final product definition
+
+**Adaptive Heating Controller is a self-learning, Home Assistant-native heating system that maintains precise room temperatures through individually learned thermal models and one centralized MPC optimizer.**
+
+The controller uses measured temperatures, radiator behaviour, boiler telemetry, weather, solar gains, ventilation and optional electrical heat sources to predict and optimize heating.
+
+It provides direct radiator control, OpenTherm boiler coordination, immediate window-triggered radiator closure, persistent model learning, detailed diagnostics and deterministic fallback behaviour.
+
+It runs locally on Home Assistant OS, communicates exclusively through Home Assistant, and is developed and released through:
+
+**https://github.com/S1146468/Adaptive-Heating-Controller**
+
+The project shall be developed incrementally, beginning with an entirely read-only application and progressing toward fully supervised MPC control only after its models, actuator interfaces and safety mechanisms have been validated.
