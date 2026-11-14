@@ -1,0 +1,14 @@
+name: Adaptive Heating Controller
+version: "0.1.0"
+slug: adaptive_heating_controller
+description: Read-only installation foundation; no heating commands or API connections
+url: https://github.com/S1146468/Adaptive-Heating-Controller
+arch:
+  - aarch64
+startup: application
+boot: manual
+stage: experimental
+init: true
+timeout: 10
+options: {}
+schema: {}

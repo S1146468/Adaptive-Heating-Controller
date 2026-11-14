@@ -1,0 +1,44 @@
+name: Validate read-only app
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  checks:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements-dev.txt
+      - run: python --version && python -m pip freeze
+      - run: python scripts/validate_metadata.py
+      - run: ruff check .
+      - run: python -m unittest discover -s tests -v
+  arm64-lifecycle:
+    # Native hosted ARM64; no QEMU/emulation, still not a physical Pi/HAOS test.
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+      - name: Record native toolchain and commit
+        run: |
+          git rev-parse HEAD
+          uname -m
+          test "$(uname -m)" = aarch64
+          docker version
+          docker buildx version
+          python3 --version
+      - name: Build ARM64 image
+        run: docker buildx build --platform linux/arm64 --load --progress plain -t ahc:test adaptive_heating_controller
+      - name: Check image platform and Python
+        run: |
+          docker image inspect ahc:test
+          test "$(docker image inspect --format '{{.Os}}/{{.Architecture}}' ahc:test)" = linux/arm64
+          docker run --rm --network none --entrypoint python ahc:test --version
+      - name: Reject immediately exiting container
+        run: python3 scripts/smoke_container.py ahc:test --expect-immediate-exit
+      - name: Offline start, stop and restart
+        run: python3 scripts/smoke_container.py ahc:test
